@@ -1,6 +1,96 @@
 <script>
-  // Will implement AG-UI client integration here
-  let messages = []
+  import { runAgent } from '../lib/agui-client.js'
+  import ChatMessage from './ChatMessage.svelte'
+
+  let messages = $state([])
+  let inputValue = $state('')
+  let isLoading = $state(false)
+  let currentResponse = $state('')
+
+  async function handleSend() {
+    if (!inputValue.trim() || isLoading) return
+
+    const userMessage = inputValue.trim()
+    inputValue = ''
+    isLoading = true
+    currentResponse = ''
+
+    // Add user message to UI
+    messages = [
+      ...messages,
+      {
+        role: 'user',
+        content: userMessage,
+      },
+    ]
+
+    // Prepare message history for AG-UI
+    const messageHistory = messages.map((msg) => ({
+      role: msg.role,
+      content: msg.content,
+    }))
+
+    try {
+      await runAgent(userMessage, handleEvent, messageHistory.slice(0, -1))
+
+      // Add final assistant response to messages
+      if (currentResponse) {
+        messages = [
+          ...messages,
+          {
+            role: 'assistant',
+            content: currentResponse,
+          },
+        ]
+      }
+    } catch (error) {
+      console.error('Error running agent:', error)
+      messages = [
+        ...messages,
+        {
+          role: 'assistant',
+          content: 'Sorry, an error occurred. Please try again.',
+        },
+      ]
+    } finally {
+      isLoading = false
+      currentResponse = ''
+    }
+  }
+
+  function handleEvent(event) {
+    switch (event.type) {
+      case 'message_delta':
+        // Streaming text from assistant
+        if (event.delta?.content) {
+          currentResponse += event.delta.content
+        }
+        break
+
+      case 'message_done':
+        // Message complete
+        break
+
+      case 'tool_call_start':
+        console.log('Tool call:', event.tool_name)
+        break
+
+      case 'tool_call_result':
+        console.log('Tool result:', event.result)
+        break
+
+      case 'error':
+        console.error('AG-UI error:', event.error)
+        break
+    }
+  }
+
+  function handleKeypress(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
 </script>
 
 <div class="chat-container">
@@ -8,16 +98,33 @@
     {#if messages.length === 0}
       <div class="empty-state">
         <p>Start a conversation about clinical trial data</p>
+        <p class="subtitle">
+          Ask about statistics, compliance checks, or query trial databases
+        </p>
       </div>
+    {:else}
+      {#each messages as message}
+        <ChatMessage {message} />
+      {/each}
+      {#if isLoading && currentResponse}
+        <ChatMessage
+          message={{ role: 'assistant', content: currentResponse, streaming: true }}
+        />
+      {/if}
     {/if}
   </div>
 
   <div class="chat-input">
     <input
       type="text"
+      bind:value={inputValue}
+      onkeypress={handleKeypress}
       placeholder="Ask about clinical trial statistics, compliance, or data..."
+      disabled={isLoading}
     />
-    <button>Send</button>
+    <button onclick={handleSend} disabled={isLoading || !inputValue.trim()}>
+      {isLoading ? 'Sending...' : 'Send'}
+    </button>
   </div>
 </div>
 
@@ -75,7 +182,18 @@
     cursor: pointer;
   }
 
-  .chat-input button:hover {
+  .chat-input button:hover:not(:disabled) {
     background: #3182ce;
+  }
+
+  .chat-input button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .empty-state .subtitle {
+    font-size: 0.875rem;
+    color: #cbd5e0;
+    margin-top: 0.5rem;
   }
 </style>
