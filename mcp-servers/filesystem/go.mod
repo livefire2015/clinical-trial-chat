@@ -1,4 +1,4 @@
-module github.com/clinical-trial-chat/mcp-filesystem
+module github.com/livefire2015/clinical-trial-chat/mcp-filesystem
 
 go 1.25.3
 

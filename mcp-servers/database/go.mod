@@ -1,4 +1,4 @@
-module github.com/clinical-trial-chat/mcp-database
+module github.com/livefire2015/clinical-trial-chat/mcp-database
 
 go 1.25.3
 
