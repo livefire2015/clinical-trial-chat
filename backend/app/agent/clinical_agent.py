@@ -3,12 +3,12 @@ Clinical Trial Analysis Agent using Pydantic-AI
 """
 from typing import Any
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.anthropic import AnthropicModel
 from .mcp_tools import mcp_db_client
 
 # Create the agent
 clinical_agent = Agent(
-    model=OpenAIModel('gpt-4'),
+    model=AnthropicModel('claude-3-5-sonnet-20241022'),
     instructions=(
         "You are an expert clinical trial analyst specializing in pharmaceutical research. "
         "You help researchers analyze clinical trial data, perform statistical analyses, "
