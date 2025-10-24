@@ -9,7 +9,7 @@ from .mcp_tools import mcp_db_client
 # Create the agent
 clinical_agent = Agent(
     model=OpenAIModel('gpt-4'),
-    system_prompt=(
+    instructions=(
         "You are an expert clinical trial analyst specializing in pharmaceutical research. "
         "You help researchers analyze clinical trial data, perform statistical analyses, "
         "and ensure regulatory compliance.\n\n"
