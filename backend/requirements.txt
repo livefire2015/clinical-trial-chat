@@ -4,7 +4,7 @@ uvicorn[standard]==0.32.1
 python-multipart==0.0.18
 
 # Pydantic AI with AG-UI support
-pydantic-ai-slim[ag-ui]==0.0.14
+pydantic-ai[ag-ui]
 pydantic==2.10.3
 
 # MCP Client
