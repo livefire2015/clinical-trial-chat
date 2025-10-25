@@ -1,11 +1,17 @@
 <script>
   import { runAgent } from '../lib/agui-client.js'
   import ChatMessage from './ChatMessage.svelte'
+  import ToolCallMessage from './ToolCallMessage.svelte'
+  import ErrorMessage from './ErrorMessage.svelte'
 
   let messages = $state([])
   let inputValue = $state('')
   let isLoading = $state(false)
   let currentResponse = $state('')
+
+  // Track active tool calls
+  let activeTools = $state(new Map()) // toolCallId -> tool message object
+  let toolArgs = $state(new Map()) // toolCallId -> accumulated args
 
   function generateId() {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -51,17 +57,25 @@
       }
     } catch (error) {
       console.error('Error running agent:', error)
-      messages = [
-        ...messages,
-        {
-          id: generateId(),
-          role: 'assistant',
-          content: 'Sorry, an error occurred. Please try again.',
-        },
-      ]
+      // Only show generic error if no error message was already added via handleEvent
+      // (RUN_ERROR events add their own error messages)
+      const lastMessage = messages[messages.length - 1]
+      if (!lastMessage || lastMessage.type !== 'error') {
+        messages = [
+          ...messages,
+          {
+            id: generateId(),
+            type: 'error',
+            content: 'Sorry, an unexpected error occurred. Please try again.',
+          },
+        ]
+      }
     } finally {
       isLoading = false
       currentResponse = ''
+      // Clear tool tracking
+      activeTools.clear()
+      toolArgs.clear()
     }
   }
 
@@ -87,20 +101,86 @@
         break
 
       case 'TOOL_CALL_START':
-        console.log('Tool call started:', event.toolCallId, event.name)
+        console.log('Tool call started:', event.toolCallId, event.toolCallName)
+        // Create a new tool message
+        const toolMessage = {
+          id: generateId(),
+          type: 'tool',
+          toolCallId: event.toolCallId,
+          toolName: event.toolCallName,
+          status: 'loading',
+          args: null,
+          result: null,
+        }
+        activeTools.set(event.toolCallId, toolMessage)
+        toolArgs.set(event.toolCallId, '')
+        messages = [...messages, toolMessage]
+        break
+
+      case 'TOOL_CALL_ARGS':
+        // Accumulate tool arguments as they stream
+        if (event.toolCallId) {
+          const currentArgs = toolArgs.get(event.toolCallId) || ''
+          toolArgs.set(event.toolCallId, currentArgs + event.delta)
+        }
+        break
+
+      case 'TOOL_CALL_END':
+        // Tool arguments complete, update the message
+        if (event.toolCallId) {
+          const tool = activeTools.get(event.toolCallId)
+          const args = toolArgs.get(event.toolCallId)
+          if (tool) {
+            tool.args = args
+            // Trigger reactivity
+            messages = [...messages]
+          }
+        }
         break
 
       case 'TOOL_CALL_RESULT':
         console.log('Tool result:', event.toolCallId, event.result)
+        // Update tool message with result
+        const toolWithResult = activeTools.get(event.toolCallId)
+        if (toolWithResult) {
+          toolWithResult.status = 'complete'
+          toolWithResult.result = event.result
+          // Trigger reactivity
+          messages = [...messages]
+        }
         break
 
       case 'RUN_ERROR':
         console.error('AG-UI run error:', event)
+        // Add error message to chat
+        const errorMessage = {
+          id: generateId(),
+          type: 'error',
+          content: event.message || 'An error occurred',
+        }
+        messages = [...messages, errorMessage]
+        // Mark any active tools as error
+        activeTools.forEach((tool) => {
+          if (tool.status === 'loading') {
+            tool.status = 'error'
+          }
+        })
+        messages = [...messages]
         break
 
       case 'error':
         // Custom error from our client wrapper
         console.error('AG-UI error:', event.error)
+        // Only add error message if it's not already a network error
+        // (network errors are expected after RUN_ERROR)
+        if (!event.error.includes('network error')) {
+          const customErrorMessage = {
+            id: generateId(),
+            type: 'error',
+            content: event.error || 'An error occurred',
+          }
+          messages = [...messages, customErrorMessage]
+        }
         break
     }
   }
@@ -124,7 +204,13 @@
       </div>
     {:else}
       {#each messages as message}
-        <ChatMessage {message} />
+        {#if message.type === 'tool'}
+          <ToolCallMessage {message} />
+        {:else if message.type === 'error'}
+          <ErrorMessage {message} />
+        {:else}
+          <ChatMessage {message} />
+        {/if}
       {/each}
       {#if isLoading && currentResponse}
         <ChatMessage
