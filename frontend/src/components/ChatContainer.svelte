@@ -7,6 +7,10 @@
   let isLoading = $state(false)
   let currentResponse = $state('')
 
+  function generateId() {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  }
+
   async function handleSend() {
     if (!inputValue.trim() || isLoading) return
 
@@ -15,17 +19,18 @@
     isLoading = true
     currentResponse = ''
 
-    // Add user message to UI
-    messages = [
-      ...messages,
-      {
-        role: 'user',
-        content: userMessage,
-      },
-    ]
+    // Add user message to UI with ID
+    const userMessageObj = {
+      id: generateId(),
+      role: 'user',
+      content: userMessage,
+    }
 
-    // Prepare message history for AG-UI
+    messages = [...messages, userMessageObj]
+
+    // Prepare message history for AG-UI (preserve all fields including id)
     const messageHistory = messages.map((msg) => ({
+      id: msg.id,
       role: msg.role,
       content: msg.content,
     }))
@@ -33,11 +38,12 @@
     try {
       await runAgent(userMessage, handleEvent, messageHistory.slice(0, -1))
 
-      // Add final assistant response to messages
+      // Add final assistant response to messages with ID
       if (currentResponse) {
         messages = [
           ...messages,
           {
+            id: generateId(),
             role: 'assistant',
             content: currentResponse,
           },
@@ -48,6 +54,7 @@
       messages = [
         ...messages,
         {
+          id: generateId(),
           role: 'assistant',
           content: 'Sorry, an error occurred. Please try again.',
         },
@@ -59,27 +66,40 @@
   }
 
   function handleEvent(event) {
+    console.log('Received event:', event.type, event)
+
     switch (event.type) {
-      case 'message_delta':
-        // Streaming text from assistant
-        if (event.delta?.content) {
-          currentResponse += event.delta.content
+      case 'TEXT_MESSAGE_START':
+        // New message starting
+        console.log('Message started:', event.messageId)
+        break
+
+      case 'TEXT_MESSAGE_CONTENT':
+        // Streaming text content from assistant
+        if (event.delta) {
+          currentResponse += event.delta
         }
         break
 
-      case 'message_done':
+      case 'TEXT_MESSAGE_END':
         // Message complete
+        console.log('Message ended:', event.messageId)
         break
 
-      case 'tool_call_start':
-        console.log('Tool call:', event.tool_name)
+      case 'TOOL_CALL_START':
+        console.log('Tool call started:', event.toolCallId, event.name)
         break
 
-      case 'tool_call_result':
-        console.log('Tool result:', event.result)
+      case 'TOOL_CALL_RESULT':
+        console.log('Tool result:', event.toolCallId, event.result)
+        break
+
+      case 'RUN_ERROR':
+        console.error('AG-UI run error:', event)
         break
 
       case 'error':
+        // Custom error from our client wrapper
         console.error('AG-UI error:', event.error)
         break
     }
