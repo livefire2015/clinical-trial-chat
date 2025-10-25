@@ -2,7 +2,7 @@
  * AG-UI Client Service
  * Handles communication with the backend agent via AG-UI protocol over SSE
  */
-import { AgentRunner } from '@ag-ui/client'
+import { HttpAgent } from '@ag-ui/client'
 
 const API_BASE_URL = 'http://localhost:8000'
 
@@ -10,9 +10,8 @@ const API_BASE_URL = 'http://localhost:8000'
  * Create and configure AG-UI agent runner
  */
 export function createAgentRunner() {
-  return new AgentRunner({
+  return new HttpAgent({
     url: `${API_BASE_URL}/api/agent/run`,
-    method: 'POST',
   })
 }
 
@@ -24,7 +23,7 @@ export function createAgentRunner() {
  * @returns {Promise<void>}
  */
 export async function runAgent(message, onEvent, messageHistory = []) {
-  const runner = createAgentRunner()
+  const agent = createAgentRunner()
 
   // Build message history including the new message
   const messages = [
@@ -35,23 +34,36 @@ export async function runAgent(message, onEvent, messageHistory = []) {
     },
   ]
 
-  // Run the agent
-  await runner.run(
-    {
-      messages,
-    },
-    {
-      onEvent: (event) => {
-        // Forward all events to the callback
-        onEvent(event)
+  try {
+    // Run the agent using HttpAgent API
+    const result = await agent.runAgent(
+      {
+        messages,
       },
-      onError: (error) => {
-        console.error('AG-UI Error:', error)
-        onEvent({
-          type: 'error',
-          error: error.message || 'An error occurred',
-        })
-      },
+      {
+        onEvent: (event) => {
+          // Forward all events to the callback
+          onEvent(event)
+        },
+        onError: (error) => {
+          console.error('AG-UI Error:', error)
+          onEvent({
+            type: 'error',
+            error: error.message || 'An error occurred',
+          })
+        },
+      }
+    )
+
+    // Handle completion if needed
+    if (result) {
+      console.log('Agent completed', result)
     }
-  )
+  } catch (error) {
+    console.error('AG-UI Error:', error)
+    onEvent({
+      type: 'error',
+      error: error.message || 'An error occurred',
+    })
+  }
 }
