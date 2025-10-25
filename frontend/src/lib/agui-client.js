@@ -8,11 +8,20 @@ const API_BASE_URL = 'http://localhost:8000'
 
 /**
  * Create and configure AG-UI agent runner
+ * @param {Array} initialMessages - Initial message history
  */
-export function createAgentRunner() {
+export function createAgentRunner(initialMessages = []) {
   return new HttpAgent({
     url: `${API_BASE_URL}/api/agent/run`,
+    initialMessages: initialMessages,
   })
+}
+
+/**
+ * Generate a unique ID for messages
+ */
+function generateId() {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
 /**
@@ -23,42 +32,47 @@ export function createAgentRunner() {
  * @returns {Promise<void>}
  */
 export async function runAgent(message, onEvent, messageHistory = []) {
-  const agent = createAgentRunner()
-
   // Build message history including the new message
+  // AG-UI requires messages to have an 'id' field
   const messages = [
-    ...messageHistory,
+    ...messageHistory.map((msg) => ({
+      ...msg,
+      id: msg.id || generateId(),
+    })),
     {
+      id: generateId(),
       role: 'user',
       content: message,
     },
   ]
 
+  console.log('Sending messages to agent:', messages)
+
+  // Create agent with initial messages
+  const agent = createAgentRunner(messages)
+
   try {
-    // Run the agent using HttpAgent API
+    // Run the agent using HttpAgent API with proper subscriber pattern
     const result = await agent.runAgent(
+      {}, // Pass empty object since messages are already in the agent
       {
-        messages,
-      },
-      {
-        onEvent: (event) => {
-          // Forward all events to the callback
-          onEvent(event)
+        onEvent: (params) => {
+          // Forward the event from params to the callback
+          console.log('AG-UI Event:', params.event)
+          onEvent(params.event)
         },
-        onError: (error) => {
-          console.error('AG-UI Error:', error)
+        onRunFailed: (params) => {
+          console.error('AG-UI Run Failed:', params.error)
           onEvent({
             type: 'error',
-            error: error.message || 'An error occurred',
+            error: params.error.message || 'An error occurred',
           })
         },
       }
     )
 
-    // Handle completion if needed
-    if (result) {
-      console.log('Agent completed', result)
-    }
+    // Handle completion
+    console.log('Agent run completed', result)
   } catch (error) {
     console.error('AG-UI Error:', error)
     onEvent({
