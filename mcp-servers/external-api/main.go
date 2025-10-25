@@ -13,34 +13,25 @@ import (
 )
 
 type ClinicalTrialsSearchArgs struct {
-	Query    string `json:"query"`
-	MaxItems int    `json:"max_items,omitempty"`
+	Query    string `json:"query" jsonschema:"description=Search query (e.g., disease name, intervention, sponsor)"`
+	MaxItems int    `json:"max_items,omitempty" jsonschema:"description=Maximum number of results to return (default: 10)"`
 }
 
 type FDADrugSearchArgs struct {
-	DrugName string `json:"drug_name"`
+	DrugName string `json:"drug_name" jsonschema:"description=Drug brand name to search for"`
 }
 
-func searchClinicalTrials(ctx context.Context, args map[string]interface{}) (*mcp.CallToolResult, error) {
-	argsJSON, err := json.Marshal(args)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Invalid arguments: %v", err)), nil
-	}
+func searchClinicalTrials(ctx context.Context, req *mcp.CallToolRequest, args ClinicalTrialsSearchArgs) (*mcp.CallToolResult, any, error) {
 
-	var searchArgs ClinicalTrialsSearchArgs
-	if err := json.Unmarshal(argsJSON, &searchArgs); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Invalid search arguments: %v", err)), nil
-	}
-
-	if searchArgs.MaxItems == 0 {
-		searchArgs.MaxItems = 10
+	if args.MaxItems == 0 {
+		args.MaxItems = 10
 	}
 
 	// Build ClinicalTrials.gov API request
 	baseURL := "https://clinicaltrials.gov/api/v2/studies"
 	params := url.Values{}
-	params.Add("query.term", searchArgs.Query)
-	params.Add("pageSize", fmt.Sprintf("%d", searchArgs.MaxItems))
+	params.Add("query.term", args.Query)
+	params.Add("pageSize", fmt.Sprintf("%d", args.MaxItems))
 	params.Add("format", "json")
 
 	apiURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
@@ -48,50 +39,65 @@ func searchClinicalTrials(ctx context.Context, args map[string]interface{}) (*mc
 	// Make HTTP request
 	resp, err := http.Get(apiURL)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to query ClinicalTrials.gov: %v", err)), nil
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to query ClinicalTrials.gov: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to read response: %v", err)), nil
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to read response: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
 	}
 
 	// Parse and return results
 	var apiResponse map[string]interface{}
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse API response: %v", err)), nil
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to parse API response: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
 	}
 
 	result := map[string]interface{}{
-		"query":    searchArgs.Query,
-		"count":    apiResponse["totalCount"],
-		"studies":  apiResponse["studies"],
+		"query":   args.Query,
+		"count":   apiResponse["totalCount"],
+		"studies": apiResponse["studies"],
 	}
 
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal result: %v", err)), nil
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to marshal result: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
 	}
 
-	return mcp.NewToolResultText(string(resultJSON)), nil
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: string(resultJSON)},
+		},
+	}, nil, nil
 }
 
-func searchFDADrugs(ctx context.Context, args map[string]interface{}) (*mcp.CallToolResult, error) {
-	argsJSON, err := json.Marshal(args)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Invalid arguments: %v", err)), nil
-	}
-
-	var drugArgs FDADrugSearchArgs
-	if err := json.Unmarshal(argsJSON, &drugArgs); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Invalid drug arguments: %v", err)), nil
-	}
+func searchFDADrugs(ctx context.Context, req *mcp.CallToolRequest, args FDADrugSearchArgs) (*mcp.CallToolResult, any, error) {
 
 	// Build FDA openFDA API request
 	baseURL := "https://api.fda.gov/drug/label.json"
 	params := url.Values{}
-	params.Add("search", fmt.Sprintf("openfda.brand_name:\"%s\"", drugArgs.DrugName))
+	params.Add("search", fmt.Sprintf("openfda.brand_name:\"%s\"", args.DrugName))
 	params.Add("limit", "5")
 
 	apiURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
@@ -99,79 +105,79 @@ func searchFDADrugs(ctx context.Context, args map[string]interface{}) (*mcp.Call
 	// Make HTTP request
 	resp, err := http.Get(apiURL)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to query FDA API: %v", err)), nil
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to query FDA API: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to read response: %v", err)), nil
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to read response: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
 	}
 
 	// Parse and return results
 	var apiResponse map[string]interface{}
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse API response: %v", err)), nil
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to parse API response: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
 	}
 
 	result := map[string]interface{}{
-		"drug_name": drugArgs.DrugName,
+		"drug_name": args.DrugName,
 		"results":   apiResponse["results"],
 	}
 
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal result: %v", err)), nil
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to marshal result: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
 	}
 
-	return mcp.NewToolResultText(string(resultJSON)), nil
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: string(resultJSON)},
+		},
+	}, nil, nil
 }
 
 func main() {
 	// Create MCP server
-	server := mcp.NewServer(mcp.ServerInfo{
+	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "clinical-trial-external-api",
 		Version: "0.1.0",
-	})
+	}, nil)
 
 	// Register ClinicalTrials.gov search tool
-	server.AddTool(mcp.Tool{
+	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_clinical_trials",
 		Description: "Search ClinicalTrials.gov database for clinical studies",
-		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
-			Properties: map[string]interface{}{
-				"query": map[string]interface{}{
-					"type":        "string",
-					"description": "Search query (e.g., disease name, intervention, sponsor)",
-				},
-				"max_items": map[string]interface{}{
-					"type":        "number",
-					"description": "Maximum number of results to return (default: 10)",
-				},
-			},
-			Required: []string{"query"},
-		},
 	}, searchClinicalTrials)
 
 	// Register FDA drug search tool
-	server.AddTool(mcp.Tool{
+	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_fda_drugs",
 		Description: "Search FDA drug database for drug labels and information",
-		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
-			Properties: map[string]interface{}{
-				"drug_name": map[string]interface{}{
-					"type":        "string",
-					"description": "Drug brand name to search for",
-				},
-			},
-			Required: []string{"drug_name"},
-		},
 	}, searchFDADrugs)
 
 	// Start stdio transport
-	if err := server.ServeStdio(); err != nil {
+	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }
