@@ -4,7 +4,7 @@ Clinical Trial Analysis Agent using Pydantic-AI
 from typing import Any
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.anthropic import AnthropicModel
-from .mcp_tools import mcp_db_client
+from .mcp_tools import mcp_db_client, mcp_external_api_client
 
 # Create the agent
 clinical_agent = Agent(
@@ -17,10 +17,13 @@ clinical_agent = Agent(
         "- Querying clinical trial databases for patient data, adverse events, and outcomes\n"
         "- Performing statistical analysis (means, medians, p-values, confidence intervals)\n"
         "- Checking compliance with FDA 21 CFR Part 11 and ICH-GCP guidelines\n"
+        "- Searching ClinicalTrials.gov for public clinical trial information\n"
+        "- Searching FDA drug database for drug labels and regulatory information\n"
         "- Analyzing trial documents and data files\n\n"
         "Always provide clear, accurate, and well-structured responses. "
         "When presenting statistical results, include proper context and interpretation. "
-        "For compliance checks, cite specific regulatory requirements."
+        "For compliance checks, cite specific regulatory requirements. "
+        "When searching external databases, provide relevant context and summaries of findings."
     ),
     retries=2,
 )
@@ -116,6 +119,41 @@ async def check_compliance(ctx: RunContext[Any], regulation: str, data_descripti
         "requirements": compliance_rules[regulation]["requirements"],
         "assessment": f"Review required for: {data_description}"
     }
+
+
+@clinical_agent.tool
+async def search_clinical_trials(
+    ctx: RunContext[Any],
+    query: str,
+    max_items: int = 10
+) -> dict:
+    """
+    Search ClinicalTrials.gov database for clinical studies.
+
+    Args:
+        query: Search query (disease name, intervention, sponsor, etc.)
+        max_items: Maximum number of results to return (default: 10)
+
+    Returns:
+        Search results with trial information including NCT ID, title, status, etc.
+    """
+    result = await mcp_external_api_client.search_clinical_trials(query, max_items)
+    return result
+
+
+@clinical_agent.tool
+async def search_fda_drugs(ctx: RunContext[Any], drug_name: str) -> dict:
+    """
+    Search FDA drug database for drug labels and information.
+
+    Args:
+        drug_name: Drug brand name to search for
+
+    Returns:
+        FDA drug label information including indications, warnings, etc.
+    """
+    result = await mcp_external_api_client.search_fda_drugs(drug_name)
+    return result
 
 
 def get_agent() -> Agent:
