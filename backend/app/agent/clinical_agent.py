@@ -1,47 +1,39 @@
 """
 Clinical Trial Analysis Agent using Pydantic-AI
 """
+from pathlib import Path
 from typing import Any
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.anthropic import AnthropicModel
-from .mcp_tools import mcp_db_client, mcp_external_api_client
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.mcp import load_mcp_servers
 
-# Create the agent
+# Load MCP servers from configuration
+config_path = Path(__file__).parent / 'mcp_config.json'
+mcp_servers = load_mcp_servers(str(config_path))
+
+# Create the agent with MCP toolsets
+model = OpenAIModel('gpt-4')
 clinical_agent = Agent(
-    model=AnthropicModel('claude-3-5-sonnet-20241022'),
+    model,
     instructions=(
         "You are an expert clinical trial analyst specializing in pharmaceutical research. "
         "You help researchers analyze clinical trial data, perform statistical analyses, "
         "and ensure regulatory compliance.\n\n"
         "Your capabilities include:\n"
-        "- Querying clinical trial databases for patient data, adverse events, and outcomes\n"
+        "- Querying clinical trial databases for patient data, adverse events, and outcomes (via MCP database server)\n"
         "- Performing statistical analysis (means, medians, p-values, confidence intervals)\n"
         "- Checking compliance with FDA 21 CFR Part 11 and ICH-GCP guidelines\n"
-        "- Searching ClinicalTrials.gov for public clinical trial information\n"
-        "- Searching FDA drug database for drug labels and regulatory information\n"
+        "- Searching ClinicalTrials.gov for public clinical trial information (via MCP external API server)\n"
+        "- Searching FDA drug database for drug labels and regulatory information (via MCP external API server)\n"
         "- Analyzing trial documents and data files\n\n"
         "Always provide clear, accurate, and well-structured responses. "
         "When presenting statistical results, include proper context and interpretation. "
         "For compliance checks, cite specific regulatory requirements. "
         "When searching external databases, provide relevant context and summaries of findings."
     ),
+    toolsets=mcp_servers,
     retries=2,
 )
-
-
-@clinical_agent.tool
-async def query_database(ctx: RunContext[Any], sql: str) -> dict:
-    """
-    Execute a SQL query on the clinical trial database.
-
-    Args:
-        sql: SELECT query to execute
-
-    Returns:
-        Query results with columns, rows, and count
-    """
-    result = await mcp_db_client.execute_query(sql)
-    return result
 
 
 @clinical_agent.tool
@@ -121,41 +113,11 @@ async def check_compliance(ctx: RunContext[Any], regulation: str, data_descripti
     }
 
 
-@clinical_agent.tool
-async def search_clinical_trials(
-    ctx: RunContext[Any],
-    query: str,
-    max_items: int = 10
-) -> dict:
-    """
-    Search ClinicalTrials.gov database for clinical studies.
-
-    Args:
-        query: Search query (disease name, intervention, sponsor, etc.)
-        max_items: Maximum number of results to return (default: 10)
-
-    Returns:
-        Search results with trial information including NCT ID, title, status, etc.
-    """
-    result = await mcp_external_api_client.search_clinical_trials(query, max_items)
-    return result
-
-
-@clinical_agent.tool
-async def search_fda_drugs(ctx: RunContext[Any], drug_name: str) -> dict:
-    """
-    Search FDA drug database for drug labels and information.
-
-    Args:
-        drug_name: Drug brand name to search for
-
-    Returns:
-        FDA drug label information including indications, warnings, etc.
-    """
-    result = await mcp_external_api_client.search_fda_drugs(drug_name)
-    return result
-
-
 def get_agent() -> Agent:
     """Get the clinical trial analysis agent"""
     return clinical_agent
+
+
+def get_mcp_servers():
+    """Get the MCP servers for lifecycle management"""
+    return mcp_servers
