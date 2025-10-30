@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "external-api": {
+      "command": "../mcp-servers/external-api/mcp-external-api",
+      "args": []
+    }
+  }
+}
