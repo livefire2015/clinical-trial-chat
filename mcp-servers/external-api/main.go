@@ -13,12 +13,12 @@ import (
 )
 
 type ClinicalTrialsSearchArgs struct {
-	Query    string `json:"query" jsonschema:"description=Search query (e.g., disease name, intervention, sponsor)"`
-	MaxItems int    `json:"max_items,omitempty" jsonschema:"description=Maximum number of results to return (default: 10)"`
+	Query    string `json:"query" description:"Search query (e.g., disease name, intervention, sponsor)"`
+	MaxItems int    `json:"max_items,omitempty" description:"Maximum number of results to return (default: 10)"`
 }
 
 type FDADrugSearchArgs struct {
-	DrugName string `json:"drug_name" jsonschema:"description=Drug brand name to search for"`
+	DrugName string `json:"drug_name" description:"Drug brand name to search for"`
 }
 
 func searchClinicalTrials(ctx context.Context, req *mcp.CallToolRequest, args ClinicalTrialsSearchArgs) (*mcp.CallToolResult, any, error) {
