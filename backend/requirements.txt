@@ -1,10 +1,10 @@
 # FastAPI and server
 fastapi>=0.116.2
-uvicorn[standard]==0.32.1
+uvicorn
 python-multipart==0.0.18
 
 # Pydantic AI with AG-UI support
-pydantic-ai[ag-ui]==1.4.0
+pydantic-ai==1.7.0
 pydantic>=2.11.0
 
 # MCP Client
@@ -16,7 +16,7 @@ asyncpg==0.30.0
 
 # Encryption and security
 cryptography==44.0.0
-python-dotenv==1.0.1
+python-dotenv
 
 # HTTP client for external APIs
 httpx==0.28.1
