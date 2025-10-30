@@ -18,7 +18,23 @@ from app.api.routes import router as api_router
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
     print("Starting Clinical Trial Analysis Chat Backend...")
+
+    # Import and initialize MCP server connections
+    from app.agent.clinical_agent import get_mcp_servers
+    servers = get_mcp_servers()
+
+    # Open connections to all MCP servers
+    print("Connecting to MCP servers...")
+    for server in servers:
+        await server.__aenter__()
+    print(f"Connected to {len(servers)} MCP server(s)")
+
     yield
+
+    # Close MCP server connections on shutdown
+    print("Closing MCP server connections...")
+    for server in servers:
+        await server.__aexit__(None, None, None)
     print("Shutting down...")
 
 
