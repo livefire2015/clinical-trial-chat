@@ -4,15 +4,27 @@ Clinical Trial Analysis Agent using Pydantic-AI
 from pathlib import Path
 from typing import Any
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.mcp import load_mcp_servers
+
+from app.config import get_settings
+
+# Load application settings
+settings = get_settings()
 
 # Load MCP servers from configuration
 config_path = Path(__file__).parent / 'mcp_config.json'
 mcp_servers = load_mcp_servers(str(config_path))
 
+# Configure the AI model (supports fallback if configured)
+if settings.ai_fallback_model:
+    # Use fallback model for automatic retry on primary model failure
+    model = FallbackModel(settings.ai_model, settings.ai_fallback_model)
+else:
+    # Use primary model only (string format auto-detects provider)
+    model = settings.ai_model
+
 # Create the agent with MCP toolsets
-model = OpenAIModel('gpt-4')
 clinical_agent = Agent(
     model,
     instructions=(
