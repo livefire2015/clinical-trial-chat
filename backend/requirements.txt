@@ -6,6 +6,7 @@ python-multipart==0.0.18
 # Pydantic AI with AG-UI support
 pydantic-ai==1.7.0
 pydantic>=2.11.0
+pydantic-settings>=2.0.0
 
 # MCP Client
 mcp
