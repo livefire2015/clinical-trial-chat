@@ -8,13 +8,26 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.mcp import load_mcp_servers
 
 from app.config import get_settings
+from app.agent.truncating_toolset import TruncatingToolset
 
 # Load application settings
 settings = get_settings()
 
 # Load MCP servers from configuration
 config_path = Path(__file__).parent / 'mcp_config.json'
-mcp_servers = load_mcp_servers(str(config_path))
+base_mcp_servers = load_mcp_servers(str(config_path))
+
+# Wrap each MCP server with truncation to handle large results
+# This automatically truncates large tool results to stay within token limits
+# while preserving full results in metadata for UI display
+mcp_servers = [
+    TruncatingToolset(
+        wrapped=server,
+        max_tokens=2000,  # Maximum tokens for model context
+        max_array_items=10,  # Maximum items to show in arrays (e.g., search results)
+    )
+    for server in base_mcp_servers
+]
 
 # Configure the AI model (supports fallback if configured)
 if settings.ai_fallback_model:
@@ -131,5 +144,7 @@ def get_agent() -> Agent:
 
 
 def get_mcp_servers():
-    """Get the MCP servers for lifecycle management"""
-    return mcp_servers
+    """Get the base MCP servers for lifecycle management"""
+    # Return the unwrapped base servers for lifecycle management
+    # Each MCPServer handles __aenter__ and __aexit__ properly
+    return base_mcp_servers

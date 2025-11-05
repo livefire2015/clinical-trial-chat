@@ -23,11 +23,11 @@ async def lifespan(app: FastAPI):
     from app.agent.clinical_agent import get_mcp_servers
     servers = get_mcp_servers()
 
-    # Open connections to all MCP servers
+    # Open connections to all MCP servers (with truncation wrapper)
     print("Connecting to MCP servers...")
     for server in servers:
         await server.__aenter__()
-    print(f"Connected to {len(servers)} MCP server(s)")
+    print(f"Connected to {len(servers)} MCP server(s) with truncation enabled")
 
     yield
 
